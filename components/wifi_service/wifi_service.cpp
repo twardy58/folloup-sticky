@@ -1,4 +1,5 @@
 #include "wifi_service.h"
+#include "portal_security.h"
 
 #include <algorithm>
 #include <atomic>
@@ -274,8 +275,12 @@ void ConfigureAccessPointConfig(const std::string& ap_ssid, wifi_config_t* confi
     strlcpy(reinterpret_cast<char*>(config->ap.ssid), ap_ssid.c_str(), sizeof(config->ap.ssid));
     config->ap.ssid_len = ap_ssid.size();
     config->ap.channel = 1;
-    config->ap.max_connection = 4;
-    config->ap.authmode = WIFI_AUTH_OPEN;
+    config->ap.max_connection = 1;
+    constexpr char password[] = CONFIG_FOLLOWUP_WIFI_AP_PASSWORD;
+    static_assert(sizeof(password) >= 21 && sizeof(password) <= 64,
+                  "Generate a 20-63 character AP password with scripts/provision_setup.py");
+    strlcpy(reinterpret_cast<char*>(config->ap.password), password, sizeof(config->ap.password));
+    config->ap.authmode = WIFI_AUTH_WPA2_PSK;
     config->ap.pmf_cfg.required = false;
 }
 
@@ -583,7 +588,7 @@ esp_err_t RegisterRoute(httpd_handle_t server, const httpd_uri_t* handler)
     if (server == nullptr || handler == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
-    const esp_err_t err = httpd_register_uri_handler(server, handler);
+    const esp_err_t err = portal_security::RegisterRoute(server, handler);
     if (err != ESP_OK) {
         ESP_LOGE(kTag, "Failed to register Wi-Fi route %s [%d]: %s",
                  handler->uri != nullptr ? handler->uri : "<null>",
@@ -867,7 +872,9 @@ void StartConfigPortal()
         return;
     }
 
+    portal_security::ResetRoutes();
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.open_fn = portal_security::OpenSession;
     // Root + WiFi API (scan/configure/status/disconnect) + portal assets (index.js/index.css) plus
     // the timezone_service and gemini_service portal routes registered via the registrar below.
     config.max_uri_handlers = 24;

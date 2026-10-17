@@ -7,6 +7,20 @@ menu "Folloup Settings"
             Prefix used when the device enters Wi-Fi access-point setup mode.
             The full AP SSID appends the last three Wi-Fi MAC bytes.
 
+    config FOLLOWUP_WIFI_AP_PASSWORD
+        string "Private setup Wi-Fi password (20-63 characters)"
+        default ""
+        help
+            Required. Generate locally with scripts/provision_setup.py.
+            Never commit this secret or distribute a firmware containing it.
+
+    config FOLLOWUP_PORTAL_PASSWORD
+        string "Private setup panel password (20-63 characters)"
+        default ""
+        help
+            Required. Separate from the Wi-Fi password. Panel username: admin.
+            Generate locally with scripts/provision_setup.py.
+
     config FOLLOWUP_WIFI_STA_SSID
         string "Built-in Wi-Fi SSID"
         default ""

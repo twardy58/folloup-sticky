@@ -1,4 +1,5 @@
 #include "timezone_service.h"
+#include "portal_security.h"
 
 #include <algorithm>
 #include <atomic>
@@ -737,7 +738,7 @@ esp_err_t RegisterPortalRoute(httpd_handle_t server, const httpd_uri_t* handler)
         return ESP_ERR_INVALID_ARG;
     }
 
-    const esp_err_t err = httpd_register_uri_handler(server, handler);
+    const esp_err_t err = portal_security::RegisterRoute(server, handler);
     if (err != ESP_OK) {
         ESP_LOGE(kTag, "Failed to register timezone portal route %s [%d]: %s",
                  handler->uri != nullptr ? handler->uri : "<null>",
