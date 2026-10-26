@@ -19,6 +19,7 @@
 #include "esp_netif.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
+#include "esp_heap_caps.h"
 #include "followup_task_config.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -31,6 +32,16 @@ namespace wifi_service {
 namespace {
 
 constexpr const char* kTag = "WifiService";
+void LogWifiHeap(const char* stage)
+{
+    ESP_LOGW(kTag, "MEM %s: internal=%u largest=%u DMA=%u DMA_largest=%u",
+        stage,
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_DMA),
+        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DMA));
+}
+
 constexpr const char* kNvsNamespace = "wifi";
 constexpr const char* kSsidKey = "ssid";
 constexpr const char* kPasswordKey = "password";
@@ -1014,7 +1025,9 @@ void InitializeStack()
     s_ap_netif = esp_netif_create_default_wifi_ap();
 
     wifi_init_config_t wifi_init = WIFI_INIT_CONFIG_DEFAULT();
+    LogWifiHeap("before init");
     ESP_ERROR_CHECK(esp_wifi_init(&wifi_init));
+    LogWifiHeap("after init");
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
@@ -1152,7 +1165,7 @@ void EnterAccessPointModeNow()
     }
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &config));
-    ESP_ERROR_CHECK(esp_wifi_start());
+    ESP_ERROR_CHECK((LogWifiHeap("before start"), esp_wifi_start()));
 
     {
         std::lock_guard<std::mutex> lock(s_state_mutex);
@@ -1216,7 +1229,7 @@ void StartStationAttempt(bool allow_ap_fallback)
             ConfigureAccessPointConfig(ap_ssid, &ap_config);
             ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
         }
-        ESP_ERROR_CHECK(esp_wifi_start());
+        ESP_ERROR_CHECK((LogWifiHeap("before start"), esp_wifi_start()));
 
         {
             std::lock_guard<std::mutex> lock(s_state_mutex);
@@ -1267,7 +1280,7 @@ void StartStationAttempt(bool allow_ap_fallback)
         ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
     }
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &station_config));
-    ESP_ERROR_CHECK(esp_wifi_start());
+    ESP_ERROR_CHECK((LogWifiHeap("before start"), esp_wifi_start()));
 
     {
         std::lock_guard<std::mutex> lock(s_state_mutex);
@@ -1389,7 +1402,7 @@ void StartNetworkScanNow()
         }
     }
 
-    err = esp_wifi_start();
+    err = (LogWifiHeap("before start"), esp_wifi_start());
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
         ResolveInFlightScan(err);
         return;

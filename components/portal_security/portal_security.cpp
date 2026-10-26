@@ -2,6 +2,7 @@
 #include "portal_security_policy.h"
 
 #include <array>
+#include <cstring>
 #include <string>
 #include "esp_netif.h"
 #include "lwip/sockets.h"
@@ -85,14 +86,34 @@ esp_err_t RegisterRoute(httpd_handle_t server, const httpd_uri_t* route)
 
 esp_err_t OpenSession(httpd_handle_t, int socket_fd)
 {
-    sockaddr_in local{};
+    sockaddr_storage local{};
     socklen_t length = sizeof(local);
     esp_netif_ip_info_t ap{};
     auto* netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
-    if (!netif || esp_netif_get_ip_info(netif, &ap) != ESP_OK || ap.ip.addr == 0 ||
-        getsockname(socket_fd, reinterpret_cast<sockaddr*>(&local), &length) != 0 ||
-        local.sin_family != AF_INET || local.sin_addr.s_addr != ap.ip.addr)
+    if (!netif || esp_netif_get_ip_info(netif, &ap) != ESP_OK ||
+        ap.ip.addr == 0 ||
+        getsockname(socket_fd, reinterpret_cast<sockaddr*>(&local), &length) != 0)
         return ESP_FAIL;
-    return ESP_OK;
+
+    uint32_t local_ipv4 = 0;
+    if (local.ss_family == AF_INET && length >= sizeof(sockaddr_in)) {
+        local_ipv4 = reinterpret_cast<const sockaddr_in*>(&local)->sin_addr.s_addr;
+    }
+#if CONFIG_LWIP_IPV6
+    else if (local.ss_family == AF_INET6 && length >= sizeof(sockaddr_in6)) {
+        const auto* addr = reinterpret_cast<const sockaddr_in6*>(&local);
+        const auto* bytes =
+            reinterpret_cast<const unsigned char*>(&addr->sin6_addr);
+        static constexpr unsigned char prefix[12] =
+            {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255};
+        if (std::memcmp(bytes, prefix, sizeof(prefix)) != 0)
+            return ESP_FAIL;
+        std::memcpy(&local_ipv4, bytes + 12, sizeof(local_ipv4));
+    }
+#endif
+    else {
+        return ESP_FAIL;
+    }
+    return local_ipv4 == ap.ip.addr ? ESP_OK : ESP_FAIL;
 }
 }
