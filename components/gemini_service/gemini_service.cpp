@@ -33,14 +33,14 @@ constexpr const char* kTag = "GeminiService";
 constexpr const char* kSettingsTag = "GeminiSettings";
 constexpr const char* kStorageNamespace = "gemini";
 constexpr const char* kStorageApiKey = "api_key";
-constexpr const char* kDefaultModelName = "models/gemini-2.5-flash-lite";
+constexpr const char* kDefaultModelName = "models/gemini-3.1-flash-lite";
 constexpr const char* kGeminiApiBaseUrl = "https://generativelanguage.googleapis.com/v1beta/";
 constexpr const char* kPortalApiSettingsGeminiUri = "/api/settings/gemini";
 constexpr const char* kPortalApiSettingsGeminiResetUri = "/api/settings/gemini/reset";
 constexpr const char* kPortalApiRuntimeGeminiUri = "/api/runtime/gemini";
 constexpr size_t kMaxPortalPayloadLen = 512;
 constexpr int kAuthTimeoutMs = 15000;
-constexpr int kGenerateTimeoutMs = 60000;  // text generation can be slow for large prompts
+constexpr int kGenerateTimeoutMs = 180000;  // text generation can be slow for large prompts
 constexpr uint32_t kAuthTaskStackWords = 8192;
 
 // Audio transcription (resumable file upload + generateContent-with-fileData).

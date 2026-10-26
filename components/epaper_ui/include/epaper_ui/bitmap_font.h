@@ -25,9 +25,11 @@ struct BitmapFont {
     uint8_t ascent;
     const GlyphBitmap* glyphs;
     const uint8_t* bitmaps;
+    uint8_t polish_glyph_count = 0;
 };
 
-const GlyphBitmap* FindGlyph(const BitmapFont& font, char ch);
+uint32_t NextCodepoint(std::string_view text, size_t& offset);
+const GlyphBitmap* FindGlyph(const BitmapFont& font, uint32_t codepoint);
 int MeasureText(const BitmapFont& font, std::string_view text, int tracking = 0);
 
 }  // namespace epaper_font
