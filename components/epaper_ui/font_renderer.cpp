@@ -116,9 +116,11 @@ void DrawText(const DrawPixelFn& draw_pixel,
 {
     const FontSelection selection = FontForRole(role);
     int cursor_x = x;
-    for (size_t index = 0; index < text.size(); ++index) {
+    size_t index = 0;
+    while (index < text.size()) {
+        const uint32_t codepoint = epaper_font::NextCodepoint(text, index);
         const epaper_font::GlyphBitmap* glyph =
-            epaper_font::FindGlyph(*selection.font, text[index]);
+            epaper_font::FindGlyph(*selection.font, codepoint);
         if (glyph == nullptr) {
             continue;
         }
@@ -161,7 +163,7 @@ void DrawText(const DrawPixelFn& draw_pixel,
         }
 
         cursor_x += ScaleMetric(glyph->advance, selection);
-        if (index + 1 < text.size()) {
+        if (index < text.size()) {
             cursor_x += ScaleMetric(selection.tracking, selection);
         }
     }

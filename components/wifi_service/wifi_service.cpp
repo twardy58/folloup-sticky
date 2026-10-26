@@ -1,4 +1,5 @@
 #include "wifi_service.h"
+#include "portal_security.h"
 
 #include <algorithm>
 #include <atomic>
@@ -18,6 +19,7 @@
 #include "esp_netif.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
+#include "esp_heap_caps.h"
 #include "followup_task_config.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -30,6 +32,16 @@ namespace wifi_service {
 namespace {
 
 constexpr const char* kTag = "WifiService";
+void LogWifiHeap(const char* stage)
+{
+    ESP_LOGW(kTag, "MEM %s: internal=%u largest=%u DMA=%u DMA_largest=%u",
+        stage,
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_DMA),
+        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DMA));
+}
+
 constexpr const char* kNvsNamespace = "wifi";
 constexpr const char* kSsidKey = "ssid";
 constexpr const char* kPasswordKey = "password";
@@ -274,8 +286,12 @@ void ConfigureAccessPointConfig(const std::string& ap_ssid, wifi_config_t* confi
     strlcpy(reinterpret_cast<char*>(config->ap.ssid), ap_ssid.c_str(), sizeof(config->ap.ssid));
     config->ap.ssid_len = ap_ssid.size();
     config->ap.channel = 1;
-    config->ap.max_connection = 4;
-    config->ap.authmode = WIFI_AUTH_OPEN;
+    config->ap.max_connection = 1;
+    constexpr char password[] = CONFIG_FOLLOWUP_WIFI_AP_PASSWORD;
+    static_assert(sizeof(password) >= 21 && sizeof(password) <= 64,
+                  "Generate a 20-63 character AP password with scripts/provision_setup.py");
+    strlcpy(reinterpret_cast<char*>(config->ap.password), password, sizeof(config->ap.password));
+    config->ap.authmode = WIFI_AUTH_WPA2_PSK;
     config->ap.pmf_cfg.required = false;
 }
 
@@ -583,7 +599,7 @@ esp_err_t RegisterRoute(httpd_handle_t server, const httpd_uri_t* handler)
     if (server == nullptr || handler == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
-    const esp_err_t err = httpd_register_uri_handler(server, handler);
+    const esp_err_t err = portal_security::RegisterRoute(server, handler);
     if (err != ESP_OK) {
         ESP_LOGE(kTag, "Failed to register Wi-Fi route %s [%d]: %s",
                  handler->uri != nullptr ? handler->uri : "<null>",
@@ -867,7 +883,9 @@ void StartConfigPortal()
         return;
     }
 
+    portal_security::ResetRoutes();
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.open_fn = portal_security::OpenSession;
     // Root + WiFi API (scan/configure/status/disconnect) + portal assets (index.js/index.css) plus
     // the timezone_service and gemini_service portal routes registered via the registrar below.
     config.max_uri_handlers = 24;
@@ -1007,7 +1025,9 @@ void InitializeStack()
     s_ap_netif = esp_netif_create_default_wifi_ap();
 
     wifi_init_config_t wifi_init = WIFI_INIT_CONFIG_DEFAULT();
+    LogWifiHeap("before init");
     ESP_ERROR_CHECK(esp_wifi_init(&wifi_init));
+    LogWifiHeap("after init");
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
@@ -1145,7 +1165,7 @@ void EnterAccessPointModeNow()
     }
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &config));
-    ESP_ERROR_CHECK(esp_wifi_start());
+    ESP_ERROR_CHECK((LogWifiHeap("before start"), esp_wifi_start()));
 
     {
         std::lock_guard<std::mutex> lock(s_state_mutex);
@@ -1209,7 +1229,7 @@ void StartStationAttempt(bool allow_ap_fallback)
             ConfigureAccessPointConfig(ap_ssid, &ap_config);
             ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
         }
-        ESP_ERROR_CHECK(esp_wifi_start());
+        ESP_ERROR_CHECK((LogWifiHeap("before start"), esp_wifi_start()));
 
         {
             std::lock_guard<std::mutex> lock(s_state_mutex);
@@ -1260,7 +1280,7 @@ void StartStationAttempt(bool allow_ap_fallback)
         ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
     }
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &station_config));
-    ESP_ERROR_CHECK(esp_wifi_start());
+    ESP_ERROR_CHECK((LogWifiHeap("before start"), esp_wifi_start()));
 
     {
         std::lock_guard<std::mutex> lock(s_state_mutex);
@@ -1382,7 +1402,7 @@ void StartNetworkScanNow()
         }
     }
 
-    err = esp_wifi_start();
+    err = (LogWifiHeap("before start"), esp_wifi_start());
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
         ResolveInFlightScan(err);
         return;

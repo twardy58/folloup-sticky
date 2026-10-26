@@ -1,4 +1,5 @@
 #include "gemini_service.h"
+#include "portal_security.h"
 
 #include <algorithm>
 #include <array>
@@ -32,14 +33,14 @@ constexpr const char* kTag = "GeminiService";
 constexpr const char* kSettingsTag = "GeminiSettings";
 constexpr const char* kStorageNamespace = "gemini";
 constexpr const char* kStorageApiKey = "api_key";
-constexpr const char* kDefaultModelName = "models/gemini-2.5-flash-lite";
+constexpr const char* kDefaultModelName = "models/gemini-3.1-flash-lite";
 constexpr const char* kGeminiApiBaseUrl = "https://generativelanguage.googleapis.com/v1beta/";
 constexpr const char* kPortalApiSettingsGeminiUri = "/api/settings/gemini";
 constexpr const char* kPortalApiSettingsGeminiResetUri = "/api/settings/gemini/reset";
 constexpr const char* kPortalApiRuntimeGeminiUri = "/api/runtime/gemini";
 constexpr size_t kMaxPortalPayloadLen = 512;
 constexpr int kAuthTimeoutMs = 15000;
-constexpr int kGenerateTimeoutMs = 60000;  // text generation can be slow for large prompts
+constexpr int kGenerateTimeoutMs = 180000;  // text generation can be slow for large prompts
 constexpr uint32_t kAuthTaskStackWords = 8192;
 
 // Audio transcription (resumable file upload + generateContent-with-fileData).
@@ -657,7 +658,7 @@ esp_err_t RegisterPortalRoute(httpd_handle_t server, const httpd_uri_t* handler)
         return ESP_ERR_INVALID_ARG;
     }
 
-    const esp_err_t err = httpd_register_uri_handler(server, handler);
+    const esp_err_t err = portal_security::RegisterRoute(server, handler);
     if (err != ESP_OK) {
         ESP_LOGE(kTag, "Failed to register Gemini portal route %s [%d]: %s",
                  handler->uri != nullptr ? handler->uri : "<null>",

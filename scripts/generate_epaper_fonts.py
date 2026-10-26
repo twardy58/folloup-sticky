@@ -84,6 +84,7 @@ kCGInterpolationNone = 1
 kCGImageAlphaNone = 0
 kAsciiFirst = 32
 kAsciiLast = 126
+kPolishChars = "ĄąĆćĘęŁłŃńÓóŚśŹźŻż"
 kIdentityTransform = CGAffineTransform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 
 CORE_GRAPHICS.CGDataProviderCreateWithFilename.argtypes = [c_char_p]
@@ -331,7 +332,7 @@ def emit_byte_array(values: list[int], indent: str) -> str:
 
 def generate_source(specs: list[FontSpec]) -> str:
     out = [
-        '#include "generated_epaper_fonts.h"',
+        '#include "epaper_ui/generated_epaper_fonts.h"',
         "",
         "namespace epaper_fonts {",
         "",
@@ -346,7 +347,7 @@ def generate_source(specs: list[FontSpec]) -> str:
 
         all_bitmap_bytes: list[int] = []
         glyph_lines: list[str] = []
-        for code in range(kAsciiFirst, kAsciiLast + 1):
+        for code in list(range(kAsciiFirst, kAsciiLast + 1)) + [ord(ch) for ch in kPolishChars]:
             glyph = render_glyph(font, code)
             offset = len(all_bitmap_bytes)
             all_bitmap_bytes.extend(glyph.bitmap)
@@ -388,6 +389,7 @@ def generate_source(specs: list[FontSpec]) -> str:
                 f"    {ascent},",
                 f"    {spec.symbol}_glyphs,",
                 f"    {spec.symbol}_bitmaps,",
+                f"    {len(kPolishChars)},",
                 "};",
                 "",
             ]
